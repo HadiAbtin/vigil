@@ -71,7 +71,16 @@ def provision_node_exporter(
     expected_host_key_fingerprint: str | None,
 ) -> ProvisionResult:
     pem = decrypt_secret(encrypted_private_key)
-    pkey = _load_private_key(pem)
+    try:
+        pkey = _load_private_key(pem)
+    finally:
+        # Best-effort: drop our only reference to the plaintext key as soon as
+        # it's parsed into a paramiko key object, so it's not sitting around
+        # for the rest of this (possibly long-running) SSH session. CPython
+        # strings are immutable and may already be copied/interned, so this
+        # isn't a guaranteed memory wipe — just no reason to hold it longer
+        # than necessary.
+        del pem
 
     client = SSHClient()
     client.load_system_host_keys()

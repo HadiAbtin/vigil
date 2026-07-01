@@ -22,7 +22,11 @@ class SSHKeyOut(ORMModel):
 
 
 class SSHKeyCreated(SSHKeyOut):
-    """Returned only once, right after generation, so the admin can copy the
-    private key if they want an offline backup — it is never retrievable again."""
+    """private_key is populated only when Vigil generated the keypair itself,
+    and only in this one response — it is never retrievable again afterwards.
+    When the admin instead pasted an existing key, was_generated is False and
+    private_key stays null: Vigil never echoes back key material it was
+    handed, since the admin already has their own copy of it."""
 
+    was_generated: bool
     private_key: str | None = None

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus, Trash2, Copy, Check } from "lucide-react";
+import { KeyRound, Plus, Trash2, Copy, Check, Sparkles, Upload, ShieldCheck } from "lucide-react";
+import clsx from "clsx";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,11 +12,31 @@ import { LoadingBlock, EmptyState } from "@/components/ui/Misc";
 import { sshKeysApi, apiErrorMessage } from "@/lib/api";
 import type { SSHKeyCreated } from "@/lib/types";
 
+type Mode = "generate" | "import";
+
+function ModeTab({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+        active
+          ? "border-vigil-cyan/40 bg-vigil-cyan/10 text-vigil-cyan-bright"
+          : "border-vigil-border text-vigil-text-dim hover:text-vigil-text",
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
+
 export default function SSHKeysPage() {
   const queryClient = useQueryClient();
   const keys = useQuery({ queryKey: ["ssh-keys"], queryFn: sshKeysApi.list });
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("generate");
   const [name, setName] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +45,14 @@ export default function SSHKeysPage() {
   const [copied, setCopied] = useState<string | null>(null);
 
   const createMutation = useMutation({
-    mutationFn: () => sshKeysApi.create({ name, private_key: privateKey || undefined }),
+    mutationFn: () => sshKeysApi.create({ name, private_key: mode === "import" ? privateKey : undefined }),
     onSuccess: (key) => {
       queryClient.invalidateQueries({ queryKey: ["ssh-keys"] });
       setCreateOpen(false);
       setCreated(key);
       setName("");
       setPrivateKey("");
+      setMode("generate");
       setError(null);
     },
     onError: (err) => setError(apiErrorMessage(err)),
@@ -49,6 +71,8 @@ export default function SSHKeysPage() {
     setCopied(tag);
     setTimeout(() => setCopied(null), 1500);
   }
+
+  const canSubmit = name.trim().length > 0 && (mode === "generate" || privateKey.trim().length > 0);
 
   return (
     <div>
@@ -80,7 +104,12 @@ export default function SSHKeysPage() {
                   <p className="mt-0.5 truncate font-mono text-[11px] text-vigil-text-faint">{key.fingerprint}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" icon={copied === `list-${key.id}` ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} onClick={() => copy(key.public_key, `list-${key.id}`)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={copied === `list-${key.id}` ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                    onClick={() => copy(key.public_key, `list-${key.id}`)}
+                  >
                     Copy public key
                   </Button>
                   <Button size="sm" variant="danger" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteId(key.id)}>
@@ -93,31 +122,65 @@ export default function SSHKeysPage() {
         )}
       </Card>
 
+      <div className="mt-4 flex items-start gap-2 text-xs text-vigil-text-faint">
+        <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          Private keys are encrypted at rest and are never retrievable through the API afterwards — Vigil only ever shows a
+          freshly-generated private key once, at creation time.
+        </span>
+      </div>
+
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New SSH key">
         <div className="space-y-4">
+          <div className="flex gap-2">
+            <ModeTab active={mode === "generate"} onClick={() => setMode("generate")} icon={<Sparkles className="size-4" />}>
+              Generate new key
+            </ModeTab>
+            <ModeTab active={mode === "import"} onClick={() => setMode("import")} icon={<Upload className="size-4" />}>
+              Import existing key
+            </ModeTab>
+          </div>
+
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. prod-fleet" required />
-          <Textarea
-            label="Private key (optional)"
-            hint="Leave blank and Vigil will generate a fresh RSA-4096 keypair for you."
-            value={privateKey}
-            onChange={(e) => setPrivateKey(e.target.value)}
-            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-          />
+
+          {mode === "generate" ? (
+            <p className="rounded-lg border border-vigil-border bg-vigil-surface-2 px-3 py-2.5 text-xs text-vigil-text-dim">
+              Vigil will generate a fresh RSA-4096 keypair. The private key is encrypted and stored for future provisioning
+              runs; you'll get the public key to copy onto your servers right after creating it.
+            </p>
+          ) : (
+            <Textarea
+              label="Private key"
+              hint="An existing key you already use elsewhere. Its public half is derived automatically — Vigil never asks for or stores the public key separately."
+              value={privateKey}
+              onChange={(e) => setPrivateKey(e.target.value)}
+              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+              required
+            />
+          )}
+
           {error && <p className="text-xs text-vigil-danger">{error}</p>}
-          <Button variant="primary" className="w-full" loading={createMutation.isPending} disabled={!name} onClick={() => createMutation.mutate()}>
-            Create key
+          <Button variant="primary" className="w-full" loading={createMutation.isPending} disabled={!canSubmit} onClick={() => createMutation.mutate()}>
+            {mode === "generate" ? "Generate key" : "Import key"}
           </Button>
         </div>
       </Modal>
 
-      <Modal open={!!created} onClose={() => setCreated(null)} title="SSH key created" wide>
+      <Modal open={!!created} onClose={() => setCreated(null)} title="SSH key saved" wide>
         {created && (
           <div className="space-y-4">
-            <p className="text-sm text-vigil-text-dim">
-              Add this <strong className="text-vigil-text">public key</strong> to the target server's{" "}
-              <code className="rounded bg-vigil-surface-2 px-1.5 py-0.5 font-mono text-xs">~/.ssh/authorized_keys</code> before
-              enabling resource monitoring on it.
-            </p>
+            {created.was_generated ? (
+              <p className="text-sm text-vigil-text-dim">
+                Add this <strong className="text-vigil-text">public key</strong> to the target server's{" "}
+                <code className="rounded bg-vigil-surface-2 px-1.5 py-0.5 font-mono text-xs">~/.ssh/authorized_keys</code>{" "}
+                before enabling resource monitoring on it.
+              </p>
+            ) : (
+              <p className="text-sm text-vigil-text-dim">
+                Key imported. Since this is a key pair you already use, its public half is most likely already on your
+                servers — here it is anyway, in case you need to copy it onto another one.
+              </p>
+            )}
             <div>
               <div className="mb-1.5 flex justify-end">
                 <Button

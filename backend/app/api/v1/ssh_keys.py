@@ -39,13 +39,15 @@ def create_ssh_key(payload: SSHKeyCreate, db: Session = Depends(get_db)) -> SSHK
     db.commit()
     db.refresh(key)
 
+    generated = not payload.private_key
     return SSHKeyCreated(
         id=key.id,
         name=key.name,
         public_key=key.public_key,
         fingerprint=key.fingerprint,
         created_at=key.created_at,
-        private_key=private_pem if not payload.private_key else None,
+        was_generated=generated,
+        private_key=private_pem if generated else None,
     )
 
 

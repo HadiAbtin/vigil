@@ -40,12 +40,27 @@ case "${ARCH}" in
 esac
 
 TARBALL="node_exporter-${VERSION}.linux-${NE_ARCH}.tar.gz"
-URL="https://github.com/prometheus/node_exporter/releases/download/v${VERSION}/${TARBALL}"
+RELEASE_BASE="https://github.com/prometheus/node_exporter/releases/download/v${VERSION}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "${WORKDIR}"' EXIT
 
-echo "[vigil] downloading ${URL}"
-curl -fsSL -o "${WORKDIR}/${TARBALL}" "${URL}"
+echo "[vigil] downloading ${RELEASE_BASE}/${TARBALL}"
+curl -fsSL -o "${WORKDIR}/${TARBALL}" "${RELEASE_BASE}/${TARBALL}"
+
+echo "[vigil] verifying checksum against the published release manifest"
+curl -fsSL -o "${WORKDIR}/sha256sums.txt" "${RELEASE_BASE}/sha256sums.txt"
+EXPECTED_SUM="$(grep " ${TARBALL}\$" "${WORKDIR}/sha256sums.txt" | awk '{print $1}')"
+if [ -z "${EXPECTED_SUM}" ]; then
+  echo "[vigil] ${TARBALL} not listed in sha256sums.txt — refusing to install an unverifiable binary" >&2
+  exit 1
+fi
+ACTUAL_SUM="$(sha256sum "${WORKDIR}/${TARBALL}" | awk '{print $1}')"
+if [ "${EXPECTED_SUM}" != "${ACTUAL_SUM}" ]; then
+  echo "[vigil] checksum mismatch for ${TARBALL} (expected ${EXPECTED_SUM}, got ${ACTUAL_SUM}) — aborting" >&2
+  exit 1
+fi
+echo "[vigil] checksum verified"
+
 tar -xzf "${WORKDIR}/${TARBALL}" -C "${WORKDIR}"
 
 EXTRACTED_BIN="${WORKDIR}/node_exporter-${VERSION}.linux-${NE_ARCH}/node_exporter"

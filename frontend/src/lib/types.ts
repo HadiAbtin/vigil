@@ -38,6 +38,7 @@ export interface SSHKey {
 }
 
 export interface SSHKeyCreated extends SSHKey {
+  was_generated: boolean;
   private_key: string | null;
 }
 

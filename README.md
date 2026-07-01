@@ -44,6 +44,7 @@ paging you five times for the same outage.
 - [Project structure](#project-structure)
 - [Local development](#local-development)
 - [Troubleshooting](#troubleshooting)
+- [Security](#security)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -253,17 +254,27 @@ interval options, same alerting and graphing.
 CPU, RAM, and disk usage come from `node_exporter`, which has to run
 bare-metal (not in a container) on the target. Vigil automates the install:
 
-1. **SSH Keys → New key.** Either paste an existing private key or let Vigil
-   generate a fresh RSA-4096 keypair for you — the private key is encrypted
-   at rest and shown to you exactly once, at creation time.
-2. Copy the displayed **public** key onto the target server's
-   `~/.ssh/authorized_keys`. The SSH user needs to be `root` or have
-   passwordless `sudo` — Vigil doesn't do interactive password-based sudo.
+1. **SSH Keys → New key**, then pick one of two explicit modes: **Generate
+   new key** (Vigil creates a fresh RSA-4096 keypair and shows you the
+   private key exactly once, at creation time — it's encrypted at rest and
+   is never retrievable afterwards) or **Import existing key** (paste a
+   private key you already use; Vigil derives and stores its public half but
+   never echoes the private key back, since you already have your own
+   copy). Either way the public key stays available to copy again later
+   from the SSH Keys list, for as long as the key exists.
+2. Copy the public key onto the target server's `~/.ssh/authorized_keys`
+   (skip this if you imported a key you'd already deployed). The SSH user
+   needs to be `root` or have passwordless `sudo` — Vigil doesn't do
+   interactive password-based sudo.
 3. On the server's detail page, **Configure resource monitoring**, pick the
    SSH key, user, and port.
-4. Vigil connects over SSH, detects the CPU architecture, downloads the
-   pinned `node_exporter` release, verifies it, and installs it as a hardened
-   systemd service. This step is safe to re-run.
+4. Vigil connects over SSH (pinning the host key on first connect — a
+   changed fingerprint on a later run blocks the connection instead of
+   silently trusting it), detects the CPU architecture, downloads the
+   pinned `node_exporter` release, verifies its checksum against the
+   release's own published `sha256sums.txt`, and installs it as a hardened
+   systemd service (dedicated unprivileged user, `NoNewPrivileges`,
+   `ProtectSystem=strict`). This step is safe to re-run.
 5. The target needs to allow inbound TCP on `9100` from wherever Prometheus
    runs — this is a firewall rule Vigil can't make for you. Status goes
    `pending → installing → installed`, and only flips to **active** once
@@ -425,6 +436,14 @@ changes later — re-verify manually if you've reimaged the box).
 **Telegram bot "Test" fails.** Double check the token (from BotFather) and
 that the bot has actually been added to the target chat/channel/group with
 permission to post.
+
+## Security
+
+SSH private keys and Telegram bot tokens are the two things in Vigil worth
+being paranoid about. See [SECURITY.md](SECURITY.md) for exactly how they're
+encrypted, what the API will and won't ever return, and what's still on you
+to get right (firewalling `node_exporter`'s port, generating real secrets,
+etc.) — including the parts that are still limitations in v1.
 
 ## Contributing
 
