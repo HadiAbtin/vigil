@@ -187,6 +187,7 @@ def _evaluate_rule(db: Session, rule: AlertRule, now: datetime) -> None:
 
         if open_event is not None and open_event.status == AlertEventStatus.FIRING:
             if rule.consecutive_healthy_count >= rule.consecutive_breaches_required:
+                open_event.status = AlertEventStatus.RESOLVED
                 open_event.resolved_at = now
                 db.flush()
                 _dispatch(open_event.id)
@@ -201,6 +202,7 @@ def _suppress_rule(db: Session, rule: AlertRule, now: datetime) -> None:
     if open_event is not None and open_event.status == AlertEventStatus.FIRING:
         # Already firing independently when the server also went down — close
         # the episode quietly (no extra Telegram noise) and switch to suppressed.
+        open_event.status = AlertEventStatus.RESOLVED
         open_event.resolved_at = now
 
     db.add(
