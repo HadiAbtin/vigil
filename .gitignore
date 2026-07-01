@@ -1,0 +1,42 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# Docker volumes / runtime data
+postgres_data/
+redis_data/
+prometheus_data/
+prometheus/file_sd/*.json
+!prometheus/file_sd/.gitkeep
+letsencrypt/
+traefik/acme.json
+
+# SSH material accidentally dropped on disk
+*.pem
+*.key
+!frontend/**/*.key.tsx
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log

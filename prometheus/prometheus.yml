@@ -1,0 +1,172 @@
+# Static scrape config. Job definitions are fixed (interval presets and probe
+# types are curated, not admin-arbitrary — see backend/app/core/constants.py
+# IntervalBucket). Only the file_sd target *files* referenced below change at
+# runtime, written atomically by the backend (app/services/prometheus_sd.py).
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # --- Ping (blackbox icmp) -------------------------------------------------
+  - job_name: blackbox_ping_30s
+    metrics_path: /probe
+    params:
+      module: [icmp_v4]
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_ping_30s.json"]
+        refresh_interval: 15s
+    relabel_configs: &blackbox_relabel
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox_exporter:9115
+
+  - job_name: blackbox_ping_1m
+    metrics_path: /probe
+    params:
+      module: [icmp_v4]
+    scrape_interval: 1m
+    scrape_timeout: 15s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_ping_1m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  - job_name: blackbox_ping_5m
+    metrics_path: /probe
+    params:
+      module: [icmp_v4]
+    scrape_interval: 5m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_ping_5m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  - job_name: blackbox_ping_15m
+    metrics_path: /probe
+    params:
+      module: [icmp_v4]
+    scrape_interval: 15m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_ping_15m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  # --- TCP port (blackbox tcp_connect) ---------------------------------------
+  - job_name: blackbox_tcp_30s
+    metrics_path: /probe
+    params:
+      module: [tcp_connect_v4]
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_tcp_30s.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  - job_name: blackbox_tcp_1m
+    metrics_path: /probe
+    params:
+      module: [tcp_connect_v4]
+    scrape_interval: 1m
+    scrape_timeout: 15s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_tcp_1m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  - job_name: blackbox_tcp_5m
+    metrics_path: /probe
+    params:
+      module: [tcp_connect_v4]
+    scrape_interval: 5m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_tcp_5m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  - job_name: blackbox_tcp_15m
+    metrics_path: /probe
+    params:
+      module: [tcp_connect_v4]
+    scrape_interval: 15m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_tcp_15m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_relabel
+
+  # --- HTTP(S) (blackbox http, method selected per-target via the `module`
+  # --- label written into file_sd — see relabel_configs below) --------------
+  - job_name: blackbox_http_30s
+    metrics_path: /probe
+    params:
+      module: [http_get_2xx]
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_http_30s.json"]
+        refresh_interval: 15s
+    relabel_configs: &blackbox_http_relabel
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+        regex: "(.+)"
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox_exporter:9115
+
+  - job_name: blackbox_http_1m
+    metrics_path: /probe
+    params:
+      module: [http_get_2xx]
+    scrape_interval: 1m
+    scrape_timeout: 15s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_http_1m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_http_relabel
+
+  - job_name: blackbox_http_5m
+    metrics_path: /probe
+    params:
+      module: [http_get_2xx]
+    scrape_interval: 5m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_http_5m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_http_relabel
+
+  - job_name: blackbox_http_15m
+    metrics_path: /probe
+    params:
+      module: [http_get_2xx]
+    scrape_interval: 15m
+    scrape_timeout: 20s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_http_15m.json"]
+        refresh_interval: 15s
+    relabel_configs: *blackbox_http_relabel
+
+  # --- node_exporter (direct scrape, no blackbox proxying) -------------------
+  - job_name: node_exporter
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    file_sd_configs:
+      - files: ["/etc/prometheus/file_sd/targets_node_exporter.json"]
+        refresh_interval: 15s

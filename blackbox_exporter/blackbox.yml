@@ -1,0 +1,46 @@
+modules:
+  icmp_v4:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: ip4
+
+  tcp_connect_v4:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+
+  # valid_status_codes is intentionally left at its default (2xx). Vigil's
+  # alert engine does not rely on blackbox's own pass/fail verdict for HTTP —
+  # it reads probe_http_status_code directly and compares it against each
+  # monitor's admin-configured expected_status_codes, so a monitor that
+  # legitimately expects e.g. 404 is evaluated correctly regardless of what
+  # blackbox itself considers "successful".
+  http_get_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      preferred_ip_protocol: ip4
+
+  http_post_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: POST
+      preferred_ip_protocol: ip4
+
+  http_head_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: HEAD
+      preferred_ip_protocol: ip4
+
+  http_put_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: PUT
+      preferred_ip_protocol: ip4

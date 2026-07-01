@@ -1,0 +1,28 @@
+# Static Traefik configuration. Dynamic routing comes entirely from Docker
+# labels (see docker-compose.yml) — nothing else in this repo needs to change
+# when DOMAIN changes.
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+
+# ACME email + CA server are set via TRAEFIK_* environment variables on the
+# traefik service in docker-compose.yml (sourced from .env) rather than here,
+# since this static file isn't shell-interpolated.
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web

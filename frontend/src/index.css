@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+@theme {
+  --font-display: "Space Grotesk", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Inter", ui-sans-serif, sans-serif;
+
+  --color-vigil-bg: #04070c;
+  --color-vigil-surface: #090f1a;
+  --color-vigil-surface-2: #0e1626;
+  --color-vigil-border: #1b2942;
+  --color-vigil-cyan: #22d3ee;
+  --color-vigil-cyan-bright: #67e8f9;
+  --color-vigil-blue: #3b82f6;
+  --color-vigil-text: #e6f1fa;
+  --color-vigil-text-dim: #8091ab;
+  --color-vigil-text-faint: #4c5b73;
+  --color-vigil-success: #34d399;
+  --color-vigil-warning: #fbbf24;
+  --color-vigil-danger: #f8617a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-vigil-bg);
+  color: var(--color-vigil-text);
+  font-family: var(--font-sans);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 211, 238, 0.12), transparent),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    36px 36px,
+    36px 36px;
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #fff;
+}
+
+* {
+  scrollbar-color: var(--color-vigil-border) transparent;
+  scrollbar-width: thin;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.vigil-glow-text {
+  text-shadow: 0 0 24px rgba(34, 211, 238, 0.35);
+}
+
+.vigil-panel {
+  background: linear-gradient(180deg, var(--color-vigil-surface), var(--color-vigil-surface-2));
+  border: 1px solid var(--color-vigil-border);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.03) inset,
+    0 20px 60px -30px rgba(0, 0, 0, 0.8);
+}
+
+.vigil-panel-glow {
+  position: relative;
+}
+
+.vigil-panel-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.5), transparent 40%, transparent 60%, rgba(59, 130, 246, 0.4));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@keyframes vigil-pulse-line {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.vigil-pulse {
+  animation: vigil-pulse-line 2.2s ease-in-out infinite;
+}
