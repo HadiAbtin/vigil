@@ -75,7 +75,7 @@ export default function TelegramBotsPage() {
           <div className="divide-y divide-vigil-border">
             {bots.data.map((bot) => (
               <div key={bot.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <div>
+                <div className="min-w-0">
                   <p className="font-display text-sm font-medium text-vigil-text">{bot.name}</p>
                   <p className="mt-0.5 font-mono text-[11px] text-vigil-text-faint">chat: {bot.chat_id}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">

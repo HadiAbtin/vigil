@@ -138,9 +138,9 @@ export default function ServerDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         {/* Port checks */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader
             title="Port checks"
             subtitle="TCP reachability on specific ports"
@@ -180,7 +180,7 @@ export default function ServerDetailPage() {
         </Card>
 
         {/* HTTP monitors */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader
             title="HTTP monitors"
             subtitle="Endpoint checks tied to this server"
@@ -266,16 +266,16 @@ export default function ServerDetailPage() {
           </div>
 
           {s.node_exporter_config?.active && (
-            <div className="grid gap-6 border-t border-vigil-border p-5 lg:grid-cols-3">
-              <div>
+            <div className="grid min-w-0 gap-6 border-t border-vigil-border p-5 lg:grid-cols-3">
+              <div className="min-w-0">
                 <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-vigil-text-dim">CPU usage</p>
                 <MetricChart ruleType="resource_cpu" targetId={s.id} height={180} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-vigil-text-dim">RAM usage</p>
                 <MetricChart ruleType="resource_ram" targetId={s.id} height={180} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-vigil-text-dim">Disk usage</p>
                 <MetricChart ruleType="resource_disk" targetId={s.id} height={180} />
               </div>

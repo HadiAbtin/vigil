@@ -118,19 +118,20 @@ export default function SSHKeysPage() {
               <code className="rounded bg-vigil-surface-2 px-1.5 py-0.5 font-mono text-xs">~/.ssh/authorized_keys</code> before
               enabling resource monitoring on it.
             </p>
-            <div className="relative">
+            <div>
+              <div className="mb-1.5 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={copied === "pub" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                  onClick={() => copy(created.public_key, "pub")}
+                >
+                  Copy
+                </Button>
+              </div>
               <pre className="max-h-32 overflow-auto rounded-lg border border-vigil-border bg-vigil-surface-2 p-3 font-mono text-xs text-vigil-cyan-bright break-all whitespace-pre-wrap">
                 {created.public_key}
               </pre>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="absolute right-2 top-2"
-                icon={copied === "pub" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                onClick={() => copy(created.public_key, "pub")}
-              >
-                Copy
-              </Button>
             </div>
 
             {created.private_key && (
@@ -139,19 +140,20 @@ export default function SSHKeysPage() {
                   This is your only chance to save an offline copy of the <strong className="text-vigil-text">private key</strong> —
                   Vigil keeps an encrypted copy, but will not display it again.
                 </p>
-                <div className="relative">
+                <div>
+                  <div className="mb-1.5 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={copied === "priv" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                      onClick={() => copy(created.private_key!, "priv")}
+                    >
+                      Copy
+                    </Button>
+                  </div>
                   <pre className="max-h-40 overflow-auto rounded-lg border border-vigil-border bg-vigil-surface-2 p-3 font-mono text-xs text-vigil-text-dim break-all whitespace-pre-wrap">
                     {created.private_key}
                   </pre>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="absolute right-2 top-2"
-                    icon={copied === "priv" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                    onClick={() => copy(created.private_key!, "priv")}
-                  >
-                    Copy
-                  </Button>
                 </div>
               </>
             )}

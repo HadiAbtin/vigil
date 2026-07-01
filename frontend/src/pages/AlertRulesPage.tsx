@@ -126,7 +126,7 @@ export default function AlertRulesPage() {
           <div className="divide-y divide-vigil-border">
             {rules.data.map((rule) => (
               <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm text-vigil-text">
                     {RULE_TYPE_LABEL[rule.rule_type]} <span className="text-vigil-text-dim">·</span>{" "}
                     <span className="font-mono text-xs text-vigil-cyan-bright">{targetLabel(rule)}</span>
