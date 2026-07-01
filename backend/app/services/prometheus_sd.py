@@ -48,6 +48,14 @@ def _write_json_atomic(path: Path, data: list[dict]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f, indent=2)
+        # mkstemp creates files 0600 (owner-only) by design. That's fine when
+        # the same container reads them back, but this directory is a shared
+        # bind mount read by the Prometheus container, which runs as a
+        # different, unprivileged UID (nobody) — without this, Prometheus
+        # silently can't open the file and discovers zero targets, no error
+        # surfaced anywhere. Needs to be readable by anyone that can reach
+        # the mount, not just the UID that happened to write it.
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
     except BaseException:
         if os.path.exists(tmp_path):
