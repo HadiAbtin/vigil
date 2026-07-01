@@ -84,14 +84,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* Desktop sidebar */}
+    <div className="flex h-dvh overflow-hidden">
+      {/* Desktop sidebar — its own scroll region (only matters if the nav
+          list ever grows taller than the viewport); it never scrolls with
+          the page, since the page itself doesn't scroll at this level. */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-vigil-border bg-vigil-surface/60 backdrop-blur-sm lg:flex">
-        <div className="border-b border-vigil-border px-5 py-5">
+        <div className="shrink-0 border-b border-vigil-border px-5 py-5">
           <Logo />
         </div>
         {navList()}
-        <div className="border-t border-vigil-border p-3">
+        <div className="shrink-0 border-t border-vigil-border p-3">
           <button
             onClick={logout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-vigil-text-dim hover:bg-white/5 hover:text-vigil-danger"
@@ -103,9 +105,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile topbar + main content, stacked in their own column so they
-          never compete for row space with the (hidden-on-mobile) sidebar. */}
+          never compete for row space with the (hidden-on-mobile) sidebar.
+          This column is capped to the viewport height (h-dvh above) and
+          only `main` scrolls — the topbar and the sidebar stay put. */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-vigil-border bg-vigil-bg/90 px-4 py-3 backdrop-blur-md lg:hidden">
+        <header className="flex shrink-0 items-center justify-between border-b border-vigil-border bg-vigil-bg/90 px-4 py-3 backdrop-blur-md lg:hidden">
           <Logo size={26} />
           <button
             onClick={() => setMobileOpen(true)}
@@ -116,7 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-x-hidden">
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-10">{children}</div>
         </main>
       </div>
