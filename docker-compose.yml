@@ -9,6 +9,11 @@ services:
     environment:
       TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL}
       TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_CASERVER: ${ACME_CA_SERVER}
+      # Traefik's bundled Docker client falls back to a very old default API
+      # version unless pinned, which newer Docker Engine releases (>=28,
+      # minimum supported API 1.40) reject outright ("client version 1.24 is
+      # too old"). Pin a modern, broadly-supported version explicitly.
+      DOCKER_API_VERSION: "1.44"
     ports:
       - "80:80"
       - "443:443"
