@@ -118,7 +118,12 @@ def provision_node_exporter(
             )
 
         script = _SCRIPT_PATH.read_text()
-        command = f"sudo -n bash -s -- {settings.NODE_EXPORTER_VERSION} {settings.NODE_EXPORTER_PORT}"
+        # Only invoke sudo when we're actually not root — some minimal server
+        # images that are only ever accessed as root don't even have a sudo
+        # binary installed, which fails as "command not found" (exit 127) if
+        # we ran it unconditionally.
+        runner = "bash -s --" if username == "root" else "sudo -n bash -s --"
+        command = f"{runner} {settings.NODE_EXPORTER_VERSION} {settings.NODE_EXPORTER_PORT}"
         stdin, stdout, stderr = client.exec_command(command, timeout=180)
         stdin.write(script)
         stdin.channel.shutdown_write()
@@ -128,10 +133,14 @@ def provision_node_exporter(
 
         log = out + (("\n" + err) if err else "")
         if exit_code != 0 or "VIGIL_INSTALL_OK" not in out:
-            raise ProvisioningError(
-                f"Install script failed (exit {exit_code}). This usually means the "
-                f"SSH user lacks passwordless sudo. Output:\n{log}"
-            )
+            hint = ""
+            if exit_code == 127:
+                hint = (
+                    " sudo lacks passwordless privileges, or isn't installed on the target."
+                    if runner.startswith("sudo")
+                    else " bash may be missing or not on PATH for this user on the target."
+                )
+            raise ProvisioningError(f"Install script failed (exit {exit_code}).{hint} Output:\n{log}")
 
         return ProvisionResult(host_key_fingerprint=fingerprint, log=log)
     finally:
