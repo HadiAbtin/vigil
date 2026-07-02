@@ -153,7 +153,7 @@ def _render_message(rule: AlertRule, detail: str) -> str:
     return f"[{rule.category.name}] {detail}"
 
 
-def _evaluate_rule(db: Session, rule: AlertRule, now: datetime) -> None:
+def _evaluate_rule(db: Session, rule: AlertRule, now: datetime, pending_dispatch: list[int]) -> None:
     checker = _CHECKERS[rule.rule_type]
     result = checker(rule)
     if result is None:
@@ -178,7 +178,7 @@ def _evaluate_rule(db: Session, rule: AlertRule, now: datetime) -> None:
                 )
                 db.add(event)
                 db.flush()
-                _dispatch(event.id)
+                pending_dispatch.append(event.id)
         elif open_event.status == AlertEventStatus.FIRING:
             open_event.last_seen_at = now
     else:
@@ -190,7 +190,7 @@ def _evaluate_rule(db: Session, rule: AlertRule, now: datetime) -> None:
                 open_event.status = AlertEventStatus.RESOLVED
                 open_event.resolved_at = now
                 db.flush()
-                _dispatch(open_event.id)
+                pending_dispatch.append(open_event.id)
 
 
 def _suppress_rule(db: Session, rule: AlertRule, now: datetime) -> None:
@@ -237,9 +237,16 @@ def evaluate_all(db: Session) -> None:
     ping_rules = [r for r in rules if r.rule_type == AlertRuleType.SERVER_PING]
     other_rules = [r for r in rules if r.rule_type != AlertRuleType.SERVER_PING]
 
+    # Collected instead of dispatched inline: the Celery worker reads this same
+    # event row in a brand-new session, so enqueueing before this function's
+    # single db.commit() below risks the worker racing ahead of the write —
+    # seeing no row at all for a new firing event, or the pre-update row for a
+    # resolve. Dispatching only happens once everything here is durably committed.
+    pending_dispatch: list[int] = []
+
     for rule in ping_rules:
         if _is_due(rule, now):
-            _evaluate_rule(db, rule, now)
+            _evaluate_rule(db, rule, now, pending_dispatch)
     db.flush()
 
     down_server_ids: set[int] = set()
@@ -255,6 +262,9 @@ def evaluate_all(db: Session) -> None:
             continue
         _close_suppression_if_any(db, rule, now)
         if _is_due(rule, now):
-            _evaluate_rule(db, rule, now)
+            _evaluate_rule(db, rule, now, pending_dispatch)
 
     db.commit()
+
+    for event_id in pending_dispatch:
+        _dispatch(event_id)
