@@ -8,6 +8,7 @@ from app.schemas.base import ORMModel
 class LoginRequest(BaseModel):
     username: str
     password: str
+    turnstile_token: str | None = None
 
 
 class LoginResponse(BaseModel):

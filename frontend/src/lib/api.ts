@@ -4,6 +4,7 @@ import type {
   AlertCategory,
   AlertEvent,
   AlertEventStatus,
+  AlertLevel,
   AlertRule,
   AlertRuleType,
   DashboardSummary,
@@ -52,9 +53,13 @@ export function apiErrorMessage(error: unknown): string {
 // --- Auth --------------------------------------------------------------
 
 export const authApi = {
-  login: (username: string, password: string) =>
+  login: (username: string, password: string, turnstileToken?: string | null) =>
     api
-      .post<{ access_token: string; must_change_password: boolean }>("/auth/login", { username, password })
+      .post<{ access_token: string; must_change_password: boolean }>("/auth/login", {
+        username,
+        password,
+        turnstile_token: turnstileToken || undefined,
+      })
       .then((r) => r.data),
   changePassword: (current_password: string, new_password: string) =>
     api.post<User>("/auth/change-password", { current_password, new_password }).then((r) => r.data),
@@ -146,9 +151,17 @@ export const telegramBotsApi = {
 
 // --- Alert events -----------------------------------------------------------
 
+export interface AlertEventFilters {
+  status?: AlertEventStatus;
+  level?: AlertLevel;
+  rule_type?: AlertRuleType;
+  category_id?: number;
+  server_id?: number;
+}
+
 export const alertEventsApi = {
-  list: (status?: AlertEventStatus) =>
-    api.get<AlertEvent[]>("/alert-events", { params: status ? { status } : undefined }).then((r) => r.data),
+  list: (filters: AlertEventFilters = {}) =>
+    api.get<AlertEvent[]>("/alert-events", { params: filters }).then((r) => r.data),
 };
 
 // --- Metrics (historical graphs) --------------------------------------

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, require_password_already_changed
-from app.core.constants import AlertEventStatus, AlertRuleType
-from app.models import AlertEvent, AlertRule
+from app.core.constants import AlertEventStatus, AlertLevel, AlertRuleType
+from app.models import AlertEvent, AlertRule, HttpMonitor, PortCheck
 from app.schemas.alert_event import AlertEventOut
 
 router = APIRouter(prefix="/alert-events", tags=["alert-events"], dependencies=[Depends(require_password_already_changed)])
@@ -22,6 +23,10 @@ def _target_name(rule: AlertRule) -> str:
 @router.get("", response_model=list[AlertEventOut])
 def list_alert_events(
     status: AlertEventStatus | None = Query(default=None),
+    level: AlertLevel | None = Query(default=None),
+    rule_type: AlertRuleType | None = Query(default=None),
+    category_id: int | None = Query(default=None),
+    server_id: int | None = Query(default=None, description="Matches events targeting this server directly, or via one of its port checks / HTTP monitors"),
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
 ) -> list[AlertEventOut]:
@@ -37,6 +42,24 @@ def list_alert_events(
     )
     if status is not None:
         query = query.filter(AlertEvent.status == status)
+    if level is not None:
+        query = query.filter(AlertEvent.level == level)
+    if rule_type is not None:
+        query = query.filter(AlertRule.rule_type == rule_type)
+    if category_id is not None:
+        query = query.filter(AlertRule.category_id == category_id)
+    if server_id is not None:
+        query = (
+            query.outerjoin(PortCheck, AlertRule.port_check_id == PortCheck.id)
+            .outerjoin(HttpMonitor, AlertRule.http_monitor_id == HttpMonitor.id)
+            .filter(
+                or_(
+                    AlertRule.server_id == server_id,
+                    PortCheck.server_id == server_id,
+                    HttpMonitor.server_id == server_id,
+                )
+            )
+        )
     events = query.order_by(AlertEvent.fired_at.desc()).limit(limit).all()
 
     return [

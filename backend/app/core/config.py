@@ -40,6 +40,11 @@ class Settings(BaseSettings):
 
     BACKEND_CORS_ORIGINS: list[str] = []
 
+    # Cloudflare Turnstile (login CAPTCHA). Left blank, login skips verification —
+    # useful for local dev without provisioning real keys.
+    TURNSTILE_SITE_KEY: str = ""
+    TURNSTILE_SECRET_KEY: str = ""
+
     @property
     def database_url(self) -> str:
         return (

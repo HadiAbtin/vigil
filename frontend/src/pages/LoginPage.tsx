@@ -5,12 +5,16 @@ import { LogIn, ShieldAlert } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Turnstile } from "@/components/Turnstile";
 import { authApi, apiErrorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setSession = useAuthStore((s) => s.setSession);
@@ -21,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { access_token, must_change_password } = await authApi.login(username, password);
+      const { access_token, must_change_password } = await authApi.login(username, password, turnstileToken);
       setSession(access_token, must_change_password);
       navigate(must_change_password ? "/change-password" : "/", { replace: true });
     } catch (err) {
@@ -67,6 +71,10 @@ export default function LoginPage() {
             required
           />
 
+          {TURNSTILE_SITE_KEY && (
+            <Turnstile siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(null)} />
+          )}
+
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-vigil-danger/30 bg-vigil-danger/10 px-3 py-2 text-xs text-vigil-danger">
               <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -74,7 +82,14 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Button type="submit" variant="primary" className="w-full" loading={loading} icon={<LogIn className="size-4" />}>
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full"
+            loading={loading}
+            disabled={!!TURNSTILE_SITE_KEY && !turnstileToken}
+            icon={<LogIn className="size-4" />}
+          >
             Sign in
           </Button>
         </form>

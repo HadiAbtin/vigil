@@ -9,16 +9,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge, LevelBadge } from "@/components/ui/Badge";
 import { LoadingBlock, EmptyState } from "@/components/ui/Misc";
 import { alertRulesApi, alertCategoriesApi, serversApi, portChecksApi, httpMonitorsApi, apiErrorMessage } from "@/lib/api";
+import { RULE_TYPE_LABEL } from "@/lib/constants";
 import type { AlertLevel, AlertRule, AlertRuleType } from "@/lib/types";
-
-const RULE_TYPE_LABEL: Record<AlertRuleType, string> = {
-  server_ping: "Server reachability (ping)",
-  tcp_port: "Port check",
-  http_monitor: "HTTP monitor",
-  resource_cpu: "CPU usage",
-  resource_ram: "RAM usage",
-  resource_disk: "Disk usage",
-};
 
 const RESOURCE_TYPES: AlertRuleType[] = ["resource_cpu", "resource_ram", "resource_disk"];
 
