@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Send, Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { LoadingBlock, EmptyState } from "@/components/ui/Misc";
 import { telegramBotsApi, alertCategoriesApi, apiErrorMessage } from "@/lib/api";
+import type { TelegramBot } from "@/lib/types";
 
 export default function TelegramBotsPage() {
   const queryClient = useQueryClient();
@@ -16,6 +17,7 @@ export default function TelegramBotsPage() {
   const categories = useQuery({ queryKey: ["alert-categories"], queryFn: alertCategoriesApi.list });
 
   const [open, setOpen] = useState(false);
+  const [editingBot, setEditingBot] = useState<TelegramBot | null>(null);
   const [name, setName] = useState("");
   const [token, setToken] = useState("");
   const [chatId, setChatId] = useState("");
@@ -25,15 +27,42 @@ export default function TelegramBotsPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["telegram-bots"] });
 
-  const createMutation = useMutation({
-    mutationFn: () => telegramBotsApi.create({ name, bot_token: token, chat_id: chatId, category_ids: categoryIds, enabled: true }),
+  function openAdd() {
+    setEditingBot(null);
+    setName("");
+    setToken("");
+    setChatId("");
+    setCategoryIds([]);
+    setError(null);
+    setOpen(true);
+  }
+
+  function openEdit(bot: TelegramBot) {
+    setEditingBot(bot);
+    setName(bot.name);
+    setToken("");
+    setChatId(bot.chat_id);
+    setCategoryIds(bot.categories.map((c) => c.id));
+    setError(null);
+    setOpen(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (editingBot) {
+        return telegramBotsApi.update(editingBot.id, {
+          name,
+          chat_id: chatId,
+          category_ids: categoryIds,
+          // Blank token on edit means "keep the existing one" — never force a re-paste to save other fields.
+          ...(token ? { bot_token: token } : {}),
+        });
+      }
+      return telegramBotsApi.create({ name, bot_token: token, chat_id: chatId, category_ids: categoryIds, enabled: true });
+    },
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      setName("");
-      setToken("");
-      setChatId("");
-      setCategoryIds([]);
     },
     onError: (err) => setError(apiErrorMessage(err)),
   });
@@ -60,7 +89,7 @@ export default function TelegramBotsPage() {
         title="Telegram Bots"
         subtitle="Each bot delivers alerts for the categories assigned to it."
         action={
-          <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>
+          <Button variant="primary" icon={<Plus className="size-4" />} onClick={openAdd}>
             New bot
           </Button>
         }
@@ -99,6 +128,9 @@ export default function TelegramBotsPage() {
                   <Button size="sm" variant="ghost" onClick={() => toggleMutation.mutate({ id: bot.id, enabled: !bot.enabled })}>
                     {bot.enabled ? "Disable" : "Enable"}
                   </Button>
+                  <button onClick={() => openEdit(bot)} className="text-vigil-text-faint hover:text-vigil-cyan-bright" title="Edit">
+                    <Pencil className="size-3.5" />
+                  </button>
                   <button onClick={() => removeMutation.mutate(bot.id)} className="text-vigil-text-faint hover:text-vigil-danger">
                     <Trash2 className="size-3.5" />
                   </button>
@@ -109,10 +141,17 @@ export default function TelegramBotsPage() {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="New Telegram bot">
+      <Modal open={open} onClose={() => setOpen(false)} title={editingBot ? "Edit Telegram bot" : "New Telegram bot"}>
         <div className="space-y-4">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="ops-alerts-bot" required />
-          <Input label="Bot token" value={token} onChange={(e) => setToken(e.target.value)} placeholder="123456:ABC-DEF..." required />
+          <Input
+            label="Bot token"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={editingBot ? "Leave blank to keep the current token" : "123456:ABC-DEF..."}
+            hint={editingBot ? "Only fill this in if you want to rotate the token." : undefined}
+            required={!editingBot}
+          />
           <Input label="Chat / group ID" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="-1001234567890" required />
 
           <div>
@@ -129,8 +168,14 @@ export default function TelegramBotsPage() {
           </div>
 
           {error && <p className="text-xs text-vigil-danger">{error}</p>}
-          <Button variant="primary" className="w-full" loading={createMutation.isPending} disabled={!name || !token || !chatId} onClick={() => createMutation.mutate()}>
-            Create bot
+          <Button
+            variant="primary"
+            className="w-full"
+            loading={saveMutation.isPending}
+            disabled={!name || !chatId || (!editingBot && !token)}
+            onClick={() => saveMutation.mutate()}
+          >
+            {editingBot ? "Save changes" : "Create bot"}
           </Button>
         </div>
       </Modal>

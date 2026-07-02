@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Plus, Trash2 } from "lucide-react";
+import { BellRing, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +31,7 @@ export default function AlertRulesPage() {
   const httpMonitors = useQuery({ queryKey: ["http-monitors", "all"], queryFn: () => httpMonitorsApi.list(false) });
 
   const [open, setOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
   const [ruleType, setRuleType] = useState<AlertRuleType>("server_ping");
   const [targetId, setTargetId] = useState<number | "">("");
   const [threshold, setThreshold] = useState("90");
@@ -43,6 +44,34 @@ export default function AlertRulesPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
 
+  function openAdd() {
+    setEditingRule(null);
+    setRuleType("server_ping");
+    setTargetId("");
+    setThreshold("90");
+    setLevel("warning");
+    setCategoryId("");
+    setBreaches("3");
+    setTemplate("");
+    setEnabled(true);
+    setError(null);
+    setOpen(true);
+  }
+
+  function openEdit(rule: AlertRule) {
+    setEditingRule(rule);
+    setRuleType(rule.rule_type);
+    setTargetId(rule.server_id ?? rule.port_check_id ?? rule.http_monitor_id ?? "");
+    setThreshold(rule.threshold_value != null ? String(rule.threshold_value) : "90");
+    setLevel(rule.level);
+    setCategoryId(rule.category_id);
+    setBreaches(String(rule.consecutive_breaches_required));
+    setTemplate(rule.custom_message_template ?? "");
+    setEnabled(rule.enabled);
+    setError(null);
+    setOpen(true);
+  }
+
   const targetOptions = useMemo(() => {
     if (ruleType === "tcp_port") {
       return (portChecks.data ?? []).map((pc) => ({ id: pc.id, label: `${pc.server_name} :${pc.port}` }));
@@ -53,8 +82,24 @@ export default function AlertRulesPage() {
     return (servers.data ?? []).map((s) => ({ id: s.id, label: s.name }));
   }, [ruleType, servers.data, portChecks.data, httpMonitors.data]);
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: () => {
+      if (editingRule) {
+        // rule_type and its target are immutable once created (delete + recreate to retarget) —
+        // only these fields are ever sent on update.
+        const payload: Partial<AlertRule> = {
+          level,
+          category_id: Number(categoryId),
+          consecutive_breaches_required: Number(breaches),
+          custom_message_template: template || null,
+          enabled,
+        };
+        if (RESOURCE_TYPES.includes(editingRule.rule_type)) {
+          payload.threshold_value = Number(threshold);
+        }
+        return alertRulesApi.update(editingRule.id, payload);
+      }
+
       const payload: Partial<AlertRule> = {
         rule_type: ruleType,
         level,
@@ -78,8 +123,6 @@ export default function AlertRulesPage() {
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      setTargetId("");
-      setTemplate("");
     },
     onError: (err) => setError(apiErrorMessage(err)),
   });
@@ -111,7 +154,7 @@ export default function AlertRulesPage() {
         title="Alert Rules"
         subtitle="Desired state + thresholds per monitored item."
         action={
-          <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>
+          <Button variant="primary" icon={<Plus className="size-4" />} onClick={openAdd}>
             New rule
           </Button>
         }
@@ -143,6 +186,9 @@ export default function AlertRulesPage() {
                   <Button size="sm" variant="ghost" onClick={() => toggleMutation.mutate({ id: rule.id, enabled: !rule.enabled })}>
                     {rule.enabled ? "Disable" : "Enable"}
                   </Button>
+                  <button onClick={() => openEdit(rule)} className="text-vigil-text-faint hover:text-vigil-cyan-bright" title="Edit">
+                    <Pencil className="size-3.5" />
+                  </button>
                   <button onClick={() => removeMutation.mutate(rule.id)} className="text-vigil-text-faint hover:text-vigil-danger">
                     <Trash2 className="size-3.5" />
                   </button>
@@ -153,11 +199,13 @@ export default function AlertRulesPage() {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="New alert rule" wide>
+      <Modal open={open} onClose={() => setOpen(false)} title={editingRule ? "Edit alert rule" : "New alert rule"} wide>
         <div className="space-y-4">
           <Select
             label="Rule type"
             value={ruleType}
+            disabled={!!editingRule}
+            hint={editingRule ? "Can't be changed after creation — delete and recreate to retarget." : undefined}
             onChange={(e) => {
               setRuleType(e.target.value as AlertRuleType);
               setTargetId("");
@@ -170,13 +218,17 @@ export default function AlertRulesPage() {
             ))}
           </Select>
 
-          <Select label="Target" value={targetId} onChange={(e) => setTargetId(Number(e.target.value))} required>
+          <Select label="Target" value={targetId} disabled={!!editingRule} onChange={(e) => setTargetId(Number(e.target.value))} required>
             <option value="">Select…</option>
-            {targetOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
+            {editingRule ? (
+              <option value={targetId}>{targetLabel(editingRule)}</option>
+            ) : (
+              targetOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))
+            )}
           </Select>
 
           {RESOURCE_TYPES.includes(ruleType) && (
@@ -231,11 +283,11 @@ export default function AlertRulesPage() {
           <Button
             variant="primary"
             className="w-full"
-            loading={createMutation.isPending}
+            loading={saveMutation.isPending}
             disabled={!targetId || !categoryId}
-            onClick={() => createMutation.mutate()}
+            onClick={() => saveMutation.mutate()}
           >
-            Create alert rule
+            {editingRule ? "Save changes" : "Create alert rule"}
           </Button>
         </div>
       </Modal>

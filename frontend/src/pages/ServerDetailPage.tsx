@@ -1,19 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Cpu, RefreshCw, Globe, Network, LineChart, Activity } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Pencil, Cpu, RefreshCw, Globe, Network, LineChart, Activity } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, Checkbox } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge, InstallStatusBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { LoadingBlock, EmptyState } from "@/components/ui/Misc";
 import { MetricChart } from "@/components/MetricChart";
 import { MetricChartModal } from "@/components/MetricChartModal";
+import { HttpMonitorFormModal } from "@/components/HttpMonitorFormModal";
 import { serversApi, sshKeysApi, httpMonitorsApi, apiErrorMessage } from "@/lib/api";
-import type { AlertRuleType, HttpMethod, IntervalBucket, PortExpectedState } from "@/lib/types";
+import type { AlertRuleType, HttpMonitor, IntervalBucket, PortCheck, PortExpectedState } from "@/lib/types";
 
 export default function ServerDetailPage() {
   const { id } = useParams();
@@ -33,19 +34,43 @@ export default function ServerDetailPage() {
     onSuccess: () => navigate("/servers"),
   });
 
-  // --- port check modal ---
+  // --- edit server modal ---
+  const [editServerOpen, setEditServerOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editHost, setEditHost] = useState("");
+  const [editPingEnabled, setEditPingEnabled] = useState(true);
+  const [editPingInterval, setEditPingInterval] = useState<IntervalBucket>("30s");
+  const [editServerError, setEditServerError] = useState<string | null>(null);
+  const editServer = useMutation({
+    mutationFn: () =>
+      serversApi.update(serverId, {
+        name: editName,
+        host: editHost,
+        ping_enabled: editPingEnabled,
+        ping_interval_bucket: editPingInterval,
+      }),
+    onSuccess: () => {
+      invalidate();
+      setEditServerOpen(false);
+    },
+    onError: (err) => setEditServerError(apiErrorMessage(err)),
+  });
+
+  // --- port check modal (create + edit) ---
   const [portOpen, setPortOpen] = useState(false);
+  const [editingPort, setEditingPort] = useState<PortCheck | null>(null);
   const [port, setPort] = useState("");
   const [expectedState, setExpectedState] = useState<PortExpectedState>("open");
   const [portInterval, setPortInterval] = useState<IntervalBucket>("30s");
   const [portError, setPortError] = useState<string | null>(null);
-  const addPort = useMutation({
-    mutationFn: () =>
-      serversApi.addPortCheck(serverId, { port: Number(port), expected_state: expectedState, interval_bucket: portInterval }),
+  const savePort = useMutation({
+    mutationFn: () => {
+      const payload = { port: Number(port), expected_state: expectedState, interval_bucket: portInterval };
+      return editingPort ? serversApi.updatePortCheck(serverId, editingPort.id, payload) : serversApi.addPortCheck(serverId, payload);
+    },
     onSuccess: () => {
       invalidate();
       setPortOpen(false);
-      setPort("");
     },
     onError: (err) => setPortError(apiErrorMessage(err)),
   });
@@ -54,36 +79,41 @@ export default function ServerDetailPage() {
     onSuccess: invalidate,
   });
 
-  // --- http monitor modal ---
+  function openAddPort() {
+    setEditingPort(null);
+    setPort("");
+    setExpectedState("open");
+    setPortInterval("30s");
+    setPortError(null);
+    setPortOpen(true);
+  }
+
+  function openEditPort(pc: PortCheck) {
+    setEditingPort(pc);
+    setPort(String(pc.port));
+    setExpectedState(pc.expected_state);
+    setPortInterval(pc.interval_bucket);
+    setPortError(null);
+    setPortOpen(true);
+  }
+
+  // --- http monitor modal (create + edit), shared component ---
   const [httpOpen, setHttpOpen] = useState(false);
-  const [httpName, setHttpName] = useState("");
-  const [httpUrl, setHttpUrl] = useState("");
-  const [httpMethod, setHttpMethod] = useState<HttpMethod>("GET");
-  const [httpStatus, setHttpStatus] = useState("200-299");
-  const [httpInterval, setHttpInterval] = useState<IntervalBucket>("30s");
-  const [httpError, setHttpError] = useState<string | null>(null);
-  const addHttp = useMutation({
-    mutationFn: () =>
-      httpMonitorsApi.create({
-        server_id: serverId,
-        name: httpName,
-        url: httpUrl,
-        method: httpMethod,
-        expected_status_codes: httpStatus,
-        interval_bucket: httpInterval,
-      }),
-    onSuccess: () => {
-      invalidate();
-      setHttpOpen(false);
-      setHttpName("");
-      setHttpUrl("");
-    },
-    onError: (err) => setHttpError(apiErrorMessage(err)),
-  });
+  const [editingHttp, setEditingHttp] = useState<HttpMonitor | null>(null);
   const removeHttp = useMutation({
     mutationFn: (monitorId: number) => httpMonitorsApi.remove(monitorId),
     onSuccess: invalidate,
   });
+
+  function openAddHttp() {
+    setEditingHttp(null);
+    setHttpOpen(true);
+  }
+
+  function openEditHttp(m: HttpMonitor) {
+    setEditingHttp(m);
+    setHttpOpen(true);
+  }
 
   // --- node exporter ---
   const [nodeOpen, setNodeOpen] = useState(false);
@@ -108,6 +138,15 @@ export default function ServerDetailPage() {
     null,
   );
 
+  useEffect(() => {
+    if (!editServerOpen || !server.data) return;
+    setEditName(server.data.name);
+    setEditHost(server.data.host);
+    setEditPingEnabled(server.data.ping_enabled);
+    setEditPingInterval(server.data.ping_interval_bucket);
+    setEditServerError(null);
+  }, [editServerOpen, server.data]);
+
   if (server.isLoading || !server.data) return <LoadingBlock />;
   const s = server.data;
 
@@ -121,9 +160,14 @@ export default function ServerDetailPage() {
         title={s.name}
         subtitle={s.host}
         action={
-          <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteOpen(true)}>
-            Delete server
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditServerOpen(true)}>
+              Edit
+            </Button>
+            <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} onClick={() => setDeleteOpen(true)}>
+              Delete server
+            </Button>
+          </div>
         }
       />
 
@@ -145,7 +189,7 @@ export default function ServerDetailPage() {
             title="Port checks"
             subtitle="TCP reachability on specific ports"
             action={
-              <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={() => setPortOpen(true)}>
+              <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={openAddPort}>
                 Add
               </Button>
             }
@@ -169,6 +213,9 @@ export default function ServerDetailPage() {
                     >
                       <LineChart className="size-3.5" />
                     </button>
+                    <button onClick={() => openEditPort(pc)} className="text-vigil-text-faint hover:text-vigil-cyan-bright" title="Edit">
+                      <Pencil className="size-3.5" />
+                    </button>
                     <button onClick={() => removePort.mutate(pc.id)} className="text-vigil-text-faint hover:text-vigil-danger">
                       <Trash2 className="size-3.5" />
                     </button>
@@ -185,7 +232,7 @@ export default function ServerDetailPage() {
             title="HTTP monitors"
             subtitle="Endpoint checks tied to this server"
             action={
-              <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={() => setHttpOpen(true)}>
+              <Button size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={openAddHttp}>
                 Add
               </Button>
             }
@@ -210,6 +257,9 @@ export default function ServerDetailPage() {
                       title="View latency graph"
                     >
                       <LineChart className="size-3.5" />
+                    </button>
+                    <button onClick={() => openEditHttp(m)} className="text-vigil-text-faint hover:text-vigil-cyan-bright" title="Edit">
+                      <Pencil className="size-3.5" />
                     </button>
                     <button onClick={() => removeHttp.mutate(m.id)} className="text-vigil-text-faint hover:text-vigil-danger">
                       <Trash2 className="size-3.5" />
@@ -284,8 +334,33 @@ export default function ServerDetailPage() {
         </Card>
       </div>
 
-      {/* Add port check modal */}
-      <Modal open={portOpen} onClose={() => setPortOpen(false)} title="Add port check">
+      {/* Edit server modal */}
+      <Modal open={editServerOpen} onClose={() => setEditServerOpen(false)} title="Edit server">
+        <div className="space-y-4">
+          <Input label="Name" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+          <Input label="Host / IP" value={editHost} onChange={(e) => setEditHost(e.target.value)} required />
+          <Checkbox label="Ping enabled" checked={editPingEnabled} onChange={(e) => setEditPingEnabled(e.target.checked)} />
+          <Select label="Ping interval" value={editPingInterval} onChange={(e) => setEditPingInterval(e.target.value as IntervalBucket)}>
+            <option value="30s">Every 30s</option>
+            <option value="1m">Every 1m</option>
+            <option value="5m">Every 5m</option>
+            <option value="15m">Every 15m</option>
+          </Select>
+          {editServerError && <p className="text-xs text-vigil-danger">{editServerError}</p>}
+          <Button
+            variant="primary"
+            className="w-full"
+            loading={editServer.isPending}
+            disabled={!editName || !editHost}
+            onClick={() => editServer.mutate()}
+          >
+            Save changes
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Add/edit port check modal */}
+      <Modal open={portOpen} onClose={() => setPortOpen(false)} title={editingPort ? "Edit port check" : "Add port check"}>
         <div className="space-y-4">
           <Input label="Port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} required />
           <Select label="Expected state" value={expectedState} onChange={(e) => setExpectedState(e.target.value as PortExpectedState)}>
@@ -299,43 +374,20 @@ export default function ServerDetailPage() {
             <option value="15m">Every 15m</option>
           </Select>
           {portError && <p className="text-xs text-vigil-danger">{portError}</p>}
-          <Button variant="primary" className="w-full" loading={addPort.isPending} disabled={!port} onClick={() => addPort.mutate()}>
-            Add port check
+          <Button variant="primary" className="w-full" loading={savePort.isPending} disabled={!port} onClick={() => savePort.mutate()}>
+            {editingPort ? "Save changes" : "Add port check"}
           </Button>
         </div>
       </Modal>
 
-      {/* Add http monitor modal */}
-      <Modal open={httpOpen} onClose={() => setHttpOpen(false)} title="Add HTTP monitor">
-        <div className="space-y-4">
-          <Input label="Name" value={httpName} onChange={(e) => setHttpName(e.target.value)} required />
-          <Input label="URL" value={httpUrl} onChange={(e) => setHttpUrl(e.target.value)} placeholder="https://example.com/health" required />
-          <div className="grid grid-cols-2 gap-4">
-            <Select label="Method" value={httpMethod} onChange={(e) => setHttpMethod(e.target.value as HttpMethod)}>
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="HEAD">HEAD</option>
-              <option value="PUT">PUT</option>
-            </Select>
-            <Select label="Check interval" value={httpInterval} onChange={(e) => setHttpInterval(e.target.value as IntervalBucket)}>
-              <option value="30s">Every 30s</option>
-              <option value="1m">Every 1m</option>
-              <option value="5m">Every 5m</option>
-              <option value="15m">Every 15m</option>
-            </Select>
-          </div>
-          <Input
-            label="Expected status codes"
-            value={httpStatus}
-            onChange={(e) => setHttpStatus(e.target.value)}
-            hint='e.g. "200-299" or "200,201,204"'
-          />
-          {httpError && <p className="text-xs text-vigil-danger">{httpError}</p>}
-          <Button variant="primary" className="w-full" loading={addHttp.isPending} disabled={!httpName || !httpUrl} onClick={() => addHttp.mutate()}>
-            Add HTTP monitor
-          </Button>
-        </div>
-      </Modal>
+      {/* Add/edit HTTP monitor modal */}
+      <HttpMonitorFormModal
+        open={httpOpen}
+        onClose={() => setHttpOpen(false)}
+        serverId={serverId}
+        monitor={editingHttp}
+        invalidateKeys={[["servers", serverId]]}
+      />
 
       {/* Configure node exporter modal */}
       <Modal open={nodeOpen} onClose={() => setNodeOpen(false)} title="Configure resource monitoring">
