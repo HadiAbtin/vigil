@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Pencil, Plus, Trash2 } from "lucide-react";
+import { BellRing, Pencil, Plus, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -33,6 +33,13 @@ export default function AlertRulesPage() {
   const [template, setTemplate] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // --- filters ---
+  const [filterLevel, setFilterLevel] = useState<AlertLevel | "">("");
+  const [filterRuleType, setFilterRuleType] = useState<AlertRuleType | "">("");
+  const [filterCategoryId, setFilterCategoryId] = useState<number | "">("");
+  const [filterServerId, setFilterServerId] = useState<number | "">("");
+  const [filterStatus, setFilterStatus] = useState<"" | "enabled" | "disabled">("");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
 
@@ -140,6 +147,42 @@ export default function AlertRulesPage() {
     return servers.data?.find((s) => s.id === rule.server_id)?.name ?? `server #${rule.server_id}`;
   }
 
+  // A tcp_port/http_monitor rule doesn't carry server_id directly — it's only
+  // reachable through the port check's / monitor's own server_id — so the
+  // server filter has to look it up the same way targetLabel does.
+  function ruleServerId(rule: AlertRule): number | null {
+    if (rule.server_id != null) return rule.server_id;
+    if (rule.port_check_id != null) {
+      return portChecks.data?.find((p) => p.id === rule.port_check_id)?.server_id ?? null;
+    }
+    if (rule.http_monitor_id != null) {
+      return httpMonitors.data?.find((m) => m.id === rule.http_monitor_id)?.server_id ?? null;
+    }
+    return null;
+  }
+
+  const filteredRules = useMemo(() => {
+    return (rules.data ?? []).filter((rule) => {
+      if (filterLevel && rule.level !== filterLevel) return false;
+      if (filterRuleType && rule.rule_type !== filterRuleType) return false;
+      if (filterCategoryId && rule.category_id !== filterCategoryId) return false;
+      if (filterServerId && ruleServerId(rule) !== filterServerId) return false;
+      if (filterStatus === "enabled" && !rule.enabled) return false;
+      if (filterStatus === "disabled" && rule.enabled) return false;
+      return true;
+    });
+  }, [rules.data, filterLevel, filterRuleType, filterCategoryId, filterServerId, filterStatus, portChecks.data, httpMonitors.data]);
+
+  const hasActiveFilters = !!(filterLevel || filterRuleType || filterCategoryId || filterServerId || filterStatus);
+
+  function clearFilters() {
+    setFilterLevel("");
+    setFilterRuleType("");
+    setFilterCategoryId("");
+    setFilterServerId("");
+    setFilterStatus("");
+  }
+
   return (
     <div>
       <PageHeader
@@ -152,14 +195,76 @@ export default function AlertRulesPage() {
         }
       />
 
+      <div className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-vigil-border bg-vigil-surface-2 p-4 sm:grid-cols-5">
+        <Select label="Level" value={filterLevel} onChange={(e) => setFilterLevel(e.target.value as AlertLevel | "")}>
+          <option value="">All levels</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="high">High</option>
+        </Select>
+
+        <Select label="Rule type" value={filterRuleType} onChange={(e) => setFilterRuleType(e.target.value as AlertRuleType | "")}>
+          <option value="">All types</option>
+          {Object.entries(RULE_TYPE_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          label="Category"
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value ? Number(e.target.value) : "")}
+        >
+          <option value="">All categories</option>
+          {categories.data?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          label="Server"
+          value={filterServerId}
+          onChange={(e) => setFilterServerId(e.target.value ? Number(e.target.value) : "")}
+        >
+          <option value="">All servers</option>
+          {servers.data?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+
+        <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as "" | "enabled" | "disabled")}>
+          <option value="">All statuses</option>
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </Select>
+
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="col-span-2 flex items-center justify-center gap-1.5 self-end rounded-lg border border-vigil-border px-3 py-2 font-mono text-xs text-vigil-text-dim transition-colors hover:border-vigil-danger/40 hover:text-vigil-danger sm:col-span-5"
+          >
+            <X className="size-3.5" /> Clear filters
+          </button>
+        )}
+      </div>
+
       <Card>
         {rules.isLoading ? (
           <LoadingBlock />
-        ) : !rules.data?.length ? (
-          <EmptyState icon={<BellRing className="size-8" />} title="No alert rules yet" />
+        ) : !filteredRules.length ? (
+          <EmptyState
+            icon={<BellRing className="size-8" />}
+            title={rules.data?.length ? "No alert rules match the current filters" : "No alert rules yet"}
+          />
         ) : (
           <div className="divide-y divide-vigil-border">
-            {rules.data.map((rule) => (
+            {filteredRules.map((rule) => (
               <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <div className="min-w-0">
                   <p className="text-sm text-vigil-text">
