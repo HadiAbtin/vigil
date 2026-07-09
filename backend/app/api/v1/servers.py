@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db, require_password_already_changed
-from app.core.constants import InstallStatus
-from app.models import NodeExporterConfig, PortCheck, Server, SSHKey
+from app.core.constants import LLM_USAGE_EXPORTER_MAX_DAYS, InstallStatus
+from app.core.encryption import encrypt_secret
+from app.models import LlmCostExporter, NodeExporterConfig, PortCheck, Server, SSHKey
+from app.schemas.llm_cost import LlmCostExporterCreate, LlmCostExporterOut, LlmCostExporterUpdate, LlmUsageResponse
 from app.schemas.node_exporter_config import NodeExporterConfigCreate, NodeExporterConfigOut
 from app.schemas.port_check import PortCheckCreate, PortCheckOut, PortCheckUpdate
 from app.schemas.server import ServerCreate, ServerDetailOut, ServerOut, ServerUpdate
-from app.services import prometheus_sd
+from app.services import llm_cost, prometheus_sd
 
 router = APIRouter(prefix="/servers", tags=["servers"], dependencies=[Depends(require_password_already_changed)])
 
@@ -44,6 +46,7 @@ def get_server(server_id: int, db: Session = Depends(get_db)) -> Server:
             joinedload(Server.port_checks),
             joinedload(Server.http_monitors),
             joinedload(Server.node_exporter_config),
+            joinedload(Server.llm_cost_exporter),
         )
         .filter(Server.id == server_id)
         .first()
@@ -162,3 +165,84 @@ def delete_node_exporter_config(server_id: int, db: Session = Depends(get_db)) -
     db.delete(server.node_exporter_config)
     db.commit()
     prometheus_sd.sync_all(db)
+
+
+# --- LLM cost tracking -------------------------------------------------------
+
+_LLM_USAGE_GRANULARITIES = {"day", "week", "month", "year"}
+
+
+@router.post("/{server_id}/llm-cost", response_model=LlmCostExporterOut, status_code=status.HTTP_201_CREATED)
+def create_llm_cost_exporter(
+    server_id: int, payload: LlmCostExporterCreate, db: Session = Depends(get_db)
+) -> LlmCostExporter:
+    server = _get_server_or_404(db, server_id)
+    if server.llm_cost_exporter is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="LLM cost tracking is already configured")
+
+    exporter = LlmCostExporter(server_id=server_id, base_url=payload.base_url, encrypted_token=encrypt_secret(payload.token))
+    db.add(exporter)
+    db.commit()
+    db.refresh(exporter)
+
+    # Backfill as much history as the exporter allows right away, so the chart
+    # isn't empty until the next Beat cycle. A bad token/URL doesn't lose the
+    # just-entered config — it's saved with last_error set, fixable via PATCH.
+    try:
+        llm_cost.sync_exporter(db, exporter, days=LLM_USAGE_EXPORTER_MAX_DAYS)
+    except llm_cost.LlmCostFetchError as exc:
+        exporter.last_error = str(exc)[:500]
+        db.commit()
+
+    return exporter
+
+
+@router.patch("/{server_id}/llm-cost", response_model=LlmCostExporterOut)
+def update_llm_cost_exporter(
+    server_id: int, payload: LlmCostExporterUpdate, db: Session = Depends(get_db)
+) -> LlmCostExporter:
+    server = _get_server_or_404(db, server_id)
+    if server.llm_cost_exporter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="LLM cost tracking is not configured")
+    exporter = server.llm_cost_exporter
+
+    for field, value in payload.model_dump(exclude_unset=True, exclude={"token"}).items():
+        setattr(exporter, field, value)
+    if payload.token is not None:
+        exporter.encrypted_token = encrypt_secret(payload.token)
+    db.commit()
+    db.refresh(exporter)
+    return exporter
+
+
+@router.post("/{server_id}/llm-cost/retry", response_model=LlmCostExporterOut)
+def retry_llm_cost_sync(server_id: int, db: Session = Depends(get_db)) -> LlmCostExporter:
+    server = _get_server_or_404(db, server_id)
+    if server.llm_cost_exporter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="LLM cost tracking is not configured")
+    exporter = server.llm_cost_exporter
+    try:
+        llm_cost.sync_exporter(db, exporter, days=LLM_USAGE_EXPORTER_MAX_DAYS)
+    except llm_cost.LlmCostFetchError as exc:
+        exporter.last_error = str(exc)[:500]
+        db.commit()
+    return exporter
+
+
+@router.delete("/{server_id}/llm-cost", status_code=status.HTTP_204_NO_CONTENT)
+def delete_llm_cost_exporter(server_id: int, db: Session = Depends(get_db)) -> None:
+    server = _get_server_or_404(db, server_id)
+    if server.llm_cost_exporter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="LLM cost tracking is not configured")
+    db.delete(server.llm_cost_exporter)
+    db.commit()
+
+
+@router.get("/{server_id}/llm-cost/usage", response_model=LlmUsageResponse)
+def get_llm_cost_usage(
+    server_id: int, granularity: str = Query(default="day"), db: Session = Depends(get_db)
+) -> LlmUsageResponse:
+    _get_server_or_404(db, server_id)
+    if granularity not in _LLM_USAGE_GRANULARITIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="granularity must be one of day, week, month, year")
+    return llm_cost.build_usage_response(db, server_id, granularity)

@@ -85,3 +85,20 @@ class AlertEventStatus(StrEnum):
     FIRING = "firing"
     RESOLVED = "resolved"
     SUPPRESSED = "suppressed"
+
+
+# Provider keys exactly as returned by the "verbo"-style LLM usage exporter's
+# /api/v1/usage/daily endpoint — used as-is for storage, mapped to a display
+# label only in the frontend/API response layer.
+LLM_PROVIDERS = ["anthropic", "openai", "gemini", "deepseek"]
+LLM_PROVIDER_LABELS: dict[str, str] = {
+    "anthropic": "Claude",
+    "openai": "OpenAI",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+}
+
+# The exporter itself hard-caps the `days` query param at 180 (HTTP 422 above
+# that), so a full year of history can only ever come from our own accumulated
+# llm_usage_daily rows, not a single live query.
+LLM_USAGE_EXPORTER_MAX_DAYS = 180

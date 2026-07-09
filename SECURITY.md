@@ -39,6 +39,12 @@ on this repository rather than a public issue.
   it back at all — not even once. You already have your own copy.
 - Telegram bot tokens are never returned after creation, full stop — the UI
   only ever shows whether a bot is configured, not the token itself.
+- LLM cost exporter tokens follow the same rule — encrypted at rest with the
+  same Fernet mechanism as everything else on this list, and never returned
+  by the API after you save them. One caveat that's a property of the
+  third-party exporter's own API, not something Vigil controls: it expects
+  the token as a URL query parameter rather than a header, so it will appear
+  in that exporter's own access logs even though the request itself is HTTPS.
 
 ## SSH provisioning specifically
 

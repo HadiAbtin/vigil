@@ -11,6 +11,7 @@ celery_app = Celery(
         "app.tasks.provision_node_exporter",
         "app.tasks.check_node_exporter_active",
         "app.tasks.dispatch_telegram_alert",
+        "app.tasks.sync_llm_usage",
     ],
 )
 
@@ -23,5 +24,9 @@ celery_app.conf.beat_schedule = {
     "check-node-exporter-active": {
         "task": "app.tasks.check_node_exporter_active.check_node_exporter_active",
         "schedule": 30.0,
+    },
+    "sync-llm-usage": {
+        "task": "app.tasks.sync_llm_usage.sync_llm_usage",
+        "schedule": 1800.0,
     },
 }

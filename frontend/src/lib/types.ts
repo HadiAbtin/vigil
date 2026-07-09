@@ -91,10 +91,33 @@ export interface Server {
   created_at: string;
 }
 
+export type LlmUsageGranularity = "day" | "week" | "month" | "year";
+
+export interface LlmCostExporter {
+  id: number;
+  server_id: number;
+  base_url: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+export interface LlmUsageResponse {
+  granularity: LlmUsageGranularity;
+  token_series: MetricSeries[];
+  cost_series: MetricSeries[];
+  period_label: string;
+  period_total_tokens: number;
+  period_total_cost: number;
+  period_cost_by_provider: Record<string, number>;
+}
+
 export interface ServerDetail extends Server {
   port_checks: PortCheck[];
   http_monitors: HttpMonitor[];
   node_exporter_config: NodeExporterConfig | null;
+  llm_cost_exporter: LlmCostExporter | null;
 }
 
 export interface AlertCategory {

@@ -9,6 +9,7 @@ from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.http_monitor import HttpMonitor
+    from app.models.llm_cost_exporter import LlmCostExporter
     from app.models.node_exporter_config import NodeExporterConfig
     from app.models.port_check import PortCheck
 
@@ -29,5 +30,8 @@ class Server(Base, TimestampMixin):
         back_populates="server", cascade="all, delete-orphan"
     )
     node_exporter_config: Mapped["NodeExporterConfig | None"] = relationship(
+        back_populates="server", uselist=False, cascade="all, delete-orphan"
+    )
+    llm_cost_exporter: Mapped["LlmCostExporter | None"] = relationship(
         back_populates="server", uselist=False, cascade="all, delete-orphan"
     )

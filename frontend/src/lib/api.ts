@@ -9,6 +9,9 @@ import type {
   AlertRuleType,
   DashboardSummary,
   HttpMonitor,
+  LlmCostExporter,
+  LlmUsageGranularity,
+  LlmUsageResponse,
   MetricRangeResponse,
   NodeExporterConfig,
   PortCheck,
@@ -97,6 +100,19 @@ export const serversApi = {
   retryNodeExporter: (serverId: number) =>
     api.post<NodeExporterConfig>(`/servers/${serverId}/node-exporter/retry`).then((r) => r.data),
   removeNodeExporter: (serverId: number) => api.delete(`/servers/${serverId}/node-exporter`),
+};
+
+// --- LLM cost tracking -------------------------------------------------------
+
+export const llmCostApi = {
+  create: (serverId: number, payload: { base_url: string; token: string }) =>
+    api.post<LlmCostExporter>(`/servers/${serverId}/llm-cost`, payload).then((r) => r.data),
+  update: (serverId: number, payload: { base_url?: string; token?: string; enabled?: boolean }) =>
+    api.patch<LlmCostExporter>(`/servers/${serverId}/llm-cost`, payload).then((r) => r.data),
+  retry: (serverId: number) => api.post<LlmCostExporter>(`/servers/${serverId}/llm-cost/retry`).then((r) => r.data),
+  remove: (serverId: number) => api.delete(`/servers/${serverId}/llm-cost`),
+  usage: (serverId: number, granularity: LlmUsageGranularity) =>
+    api.get<LlmUsageResponse>(`/servers/${serverId}/llm-cost/usage`, { params: { granularity } }).then((r) => r.data),
 };
 
 // --- Port checks (flat, cross-server — used by the alert rule form) -------

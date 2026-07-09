@@ -8,3 +8,13 @@ export const RULE_TYPE_LABEL: Record<AlertRuleType, string> = {
   resource_ram: "RAM usage",
   resource_disk: "Disk usage",
 };
+
+// Matches the provider keys returned by the LLM usage exporter's API exactly
+// (e.g. "anthropic", not "claude") — this only maps them to a display label.
+export const LLM_PROVIDERS = ["anthropic", "openai", "gemini", "deepseek"] as const;
+export const LLM_PROVIDER_LABEL: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "OpenAI",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+};

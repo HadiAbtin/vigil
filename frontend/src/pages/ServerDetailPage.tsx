@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2, Pencil, Cpu, RefreshCw, Globe, Network, LineChart, Activity } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Pencil, Cpu, RefreshCw, Globe, Network, LineChart, Activity, Coins } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +13,9 @@ import { LoadingBlock, EmptyState } from "@/components/ui/Misc";
 import { MetricChart } from "@/components/MetricChart";
 import { MetricChartModal } from "@/components/MetricChartModal";
 import { HttpMonitorFormModal } from "@/components/HttpMonitorFormModal";
-import { serversApi, sshKeysApi, httpMonitorsApi, apiErrorMessage } from "@/lib/api";
+import { LlmCostChart } from "@/components/LlmCostChart";
+import { LlmCostConfigModal } from "@/components/LlmCostConfigModal";
+import { serversApi, sshKeysApi, httpMonitorsApi, llmCostApi, apiErrorMessage } from "@/lib/api";
 import type { AlertRuleType, HttpMonitor, IntervalBucket, PortCheck, PortExpectedState } from "@/lib/types";
 
 export default function ServerDetailPage() {
@@ -132,6 +134,11 @@ export default function ServerDetailPage() {
   });
   const retryNodeExporter = useMutation({ mutationFn: () => serversApi.retryNodeExporter(serverId), onSuccess: invalidate });
   const removeNodeExporter = useMutation({ mutationFn: () => serversApi.removeNodeExporter(serverId), onSuccess: invalidate });
+
+  // --- LLM cost tracking ---
+  const [llmCostConfigOpen, setLlmCostConfigOpen] = useState(false);
+  const retryLlmCostSync = useMutation({ mutationFn: () => llmCostApi.retry(serverId), onSuccess: invalidate });
+  const removeLlmCostExporter = useMutation({ mutationFn: () => llmCostApi.remove(serverId), onSuccess: invalidate });
 
   // --- metric graph modal (port checks + http monitors) ---
   const [chartModal, setChartModal] = useState<{ ruleType: AlertRuleType; targetId: number; title: string } | null>(
@@ -334,6 +341,58 @@ export default function ServerDetailPage() {
         </Card>
       </div>
 
+      {/* LLM cost tracking */}
+      <div className="mt-6">
+        <Card>
+          <CardHeader
+            title="LLM Cost"
+            subtitle="Token usage & estimated cost across Claude, OpenAI, Gemini, and DeepSeek"
+            action={
+              s.llm_cost_exporter && (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" icon={<Pencil className="size-3.5" />} onClick={() => setLlmCostConfigOpen(true)}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="secondary" icon={<RefreshCw className="size-3.5" />} loading={retryLlmCostSync.isPending} onClick={() => retryLlmCostSync.mutate()}>
+                    Resync
+                  </Button>
+                  <Button size="sm" variant="danger" icon={<Trash2 className="size-3.5" />} onClick={() => removeLlmCostExporter.mutate()}>
+                    Remove
+                  </Button>
+                </div>
+              )
+            }
+          />
+          <div className="p-5">
+            {!s.llm_cost_exporter ? (
+              <EmptyState
+                icon={<Coins className="size-8" />}
+                title="Not configured"
+                description="Point Vigil at a usage exporter's endpoint and token to start tracking LLM spend for this server."
+                action={
+                  <Button variant="primary" size="sm" onClick={() => setLlmCostConfigOpen(true)}>
+                    Configure LLM cost tracking
+                  </Button>
+                }
+              />
+            ) : (
+              <>
+                <div className="mb-4 flex flex-wrap items-center gap-2 font-mono text-xs text-vigil-text-dim">
+                  <span>{s.llm_cost_exporter.base_url}</span>
+                  {s.llm_cost_exporter.last_synced_at && (
+                    <span>· last synced {new Date(s.llm_cost_exporter.last_synced_at).toLocaleString()}</span>
+                  )}
+                </div>
+                {s.llm_cost_exporter.last_error && (
+                  <p className="mb-4 text-xs text-vigil-danger">{s.llm_cost_exporter.last_error}</p>
+                )}
+                <LlmCostChart serverId={s.id} />
+              </>
+            )}
+          </div>
+        </Card>
+      </div>
+
       {/* Edit server modal */}
       <Modal open={editServerOpen} onClose={() => setEditServerOpen(false)} title="Edit server">
         <div className="space-y-4">
@@ -414,6 +473,14 @@ export default function ServerDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Configure/edit LLM cost tracking modal */}
+      <LlmCostConfigModal
+        open={llmCostConfigOpen}
+        onClose={() => setLlmCostConfigOpen(false)}
+        serverId={serverId}
+        existing={s.llm_cost_exporter}
+      />
 
       <ConfirmDialog
         open={deleteOpen}

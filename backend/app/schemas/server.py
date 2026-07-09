@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from app.core.constants import IntervalBucket
 from app.schemas.base import ORMModel
 from app.schemas.http_monitor import HttpMonitorOut
+from app.schemas.llm_cost import LlmCostExporterOut
 from app.schemas.node_exporter_config import NodeExporterConfigOut
 from app.schemas.port_check import PortCheckOut
 
@@ -36,3 +37,4 @@ class ServerDetailOut(ServerOut):
     port_checks: list[PortCheckOut] = []
     http_monitors: list[HttpMonitorOut] = []
     node_exporter_config: NodeExporterConfigOut | None = None
+    llm_cost_exporter: LlmCostExporterOut | None = None
