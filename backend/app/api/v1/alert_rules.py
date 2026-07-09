@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_password_already_changed
 from app.models import AlertCategory, AlertRule, HttpMonitor, PortCheck, Server
-from app.schemas.alert_rule import AlertRuleCreate, AlertRuleOut, AlertRuleUpdate
+from app.schemas.alert_rule import AlertRuleCreate, AlertRuleOut, AlertRuleUpdate, validate_threshold
 
 router = APIRouter(prefix="/alert-rules", tags=["alert-rules"], dependencies=[Depends(require_password_already_changed)])
 
@@ -46,6 +46,11 @@ def update_alert_rule(rule_id: int, payload: AlertRuleUpdate, db: Session = Depe
     updates = payload.model_dump(exclude_unset=True)
     if "category_id" in updates and db.get(AlertCategory, updates["category_id"]) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category not found")
+    if "threshold_value" in updates:
+        try:
+            validate_threshold(rule.rule_type, updates["threshold_value"])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     for field, value in updates.items():
         setattr(rule, field, value)
     db.commit()

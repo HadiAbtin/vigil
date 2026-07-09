@@ -13,6 +13,19 @@ import { RULE_TYPE_LABEL } from "@/lib/constants";
 import type { AlertLevel, AlertRule, AlertRuleType } from "@/lib/types";
 
 const RESOURCE_TYPES: AlertRuleType[] = ["resource_cpu", "resource_ram", "resource_disk"];
+const LLM_RULE_TYPES: AlertRuleType[] = ["llm_tokens", "llm_cost"];
+// Rule types whose threshold_value is meaningful (percent for resource types,
+// absolute tokens/dollars for llm types) — server_ping/tcp_port/http_monitor
+// don't use it at all.
+const THRESHOLD_TYPES: AlertRuleType[] = [...RESOURCE_TYPES, ...LLM_RULE_TYPES];
+
+function thresholdLabel(rule: AlertRule): string {
+  if (rule.threshold_value == null) return "";
+  if (rule.rule_type === "llm_tokens") return ` · threshold ${rule.threshold_value.toLocaleString()} tokens/day`;
+  if (rule.rule_type === "llm_cost") return ` · threshold $${rule.threshold_value}/day`;
+  if (RESOURCE_TYPES.includes(rule.rule_type)) return ` · threshold ${rule.threshold_value}%`;
+  return "";
+}
 
 export default function AlertRulesPage() {
   const queryClient = useQueryClient();
@@ -93,7 +106,7 @@ export default function AlertRulesPage() {
           custom_message_template: template || null,
           enabled,
         };
-        if (RESOURCE_TYPES.includes(editingRule.rule_type)) {
+        if (THRESHOLD_TYPES.includes(editingRule.rule_type)) {
           payload.threshold_value = Number(threshold);
         }
         return alertRulesApi.update(editingRule.id, payload);
@@ -107,7 +120,7 @@ export default function AlertRulesPage() {
         custom_message_template: template || null,
         enabled,
       };
-      if (RESOURCE_TYPES.includes(ruleType)) {
+      if (THRESHOLD_TYPES.includes(ruleType)) {
         payload.server_id = Number(targetId);
         payload.threshold_value = Number(threshold);
       } else if (ruleType === "tcp_port") {
@@ -273,7 +286,7 @@ export default function AlertRulesPage() {
                   </p>
                   <p className="mt-0.5 text-xs text-vigil-text-dim">
                     {categoryName(rule.category_id)}
-                    {rule.threshold_value != null && ` · threshold ${rule.threshold_value}%`}
+                    {thresholdLabel(rule)}
                     {` · fires after ${rule.consecutive_breaches_required} consecutive breaches`}
                   </p>
                 </div>
@@ -304,8 +317,16 @@ export default function AlertRulesPage() {
             disabled={!!editingRule}
             hint={editingRule ? "Can't be changed after creation — delete and recreate to retarget." : undefined}
             onChange={(e) => {
-              setRuleType(e.target.value as AlertRuleType);
+              const nextType = e.target.value as AlertRuleType;
+              setRuleType(nextType);
               setTargetId("");
+              if (LLM_RULE_TYPES.includes(nextType)) {
+                setBreaches("1");
+                setThreshold("");
+              } else if (RESOURCE_TYPES.includes(nextType)) {
+                setBreaches("3");
+                setThreshold("90");
+              }
             }}
           >
             {Object.entries(RULE_TYPE_LABEL).map(([value, label]) => (
@@ -341,6 +362,31 @@ export default function AlertRulesPage() {
             />
           )}
 
+          {ruleType === "llm_tokens" && (
+            <Input
+              label="Threshold (tokens/day)"
+              type="number"
+              min={1}
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              hint="Alert fires once today's total token usage across all providers reaches this."
+              required
+            />
+          )}
+
+          {ruleType === "llm_cost" && (
+            <Input
+              label="Threshold (USD/day)"
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              hint="Alert fires once today's total LLM cost across all providers reaches this amount."
+              required
+            />
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <Select label="Level" value={level} onChange={(e) => setLevel(e.target.value as AlertLevel)}>
               <option value="info">Info</option>
@@ -364,7 +410,11 @@ export default function AlertRulesPage() {
             max={20}
             value={breaches}
             onChange={(e) => setBreaches(e.target.value)}
-            hint="Higher = fewer false alarms on flaky/flapping checks, slower to alert."
+            hint={
+              LLM_RULE_TYPES.includes(ruleType)
+                ? "LLM alerts fire on the first breach and can't flap within a day, so 1 is recommended."
+                : "Higher = fewer false alarms on flaky/flapping checks, slower to alert."
+            }
           />
 
           <Textarea

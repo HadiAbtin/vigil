@@ -70,6 +70,18 @@ def sync_exporter(db: Session, exporter: LlmCostExporter, days: int) -> None:
     db.commit()
 
 
+def get_today_totals(db: Session, server_id: int) -> tuple[float, float]:
+    """Sums today's (UTC) tokens and cost across all providers for a server —
+    used by the alert engine's llm_tokens/llm_cost threshold checks. Returns
+    (0.0, 0.0) if nothing has synced yet today, which simply never breaches a
+    positive threshold rather than needing special-cased "no data" handling."""
+    today = datetime.now(timezone.utc).date()
+    rows = db.query(LlmUsageDaily).filter(LlmUsageDaily.server_id == server_id, LlmUsageDaily.date == today).all()
+    tokens = sum(row.input_tokens + row.output_tokens for row in rows)
+    cost = sum(row.cost_usd for row in rows)
+    return float(tokens), float(cost)
+
+
 def _bucket_start(d: date_cls, granularity: str) -> date_cls:
     if granularity == "day":
         return d

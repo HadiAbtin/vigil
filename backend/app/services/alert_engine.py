@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
+    LLM_COST_ALERT_INTERVAL_SECONDS,
+    LLM_RULE_TYPES,
     NODE_EXPORTER_SCRAPE_INTERVAL_SECONDS,
     INTERVAL_BUCKET_SECONDS,
     AlertEventStatus,
@@ -23,7 +25,7 @@ from app.core.constants import (
     PortExpectedState,
 )
 from app.models import AlertEvent, AlertRule
-from app.services import prometheus_query
+from app.services import llm_cost, prometheus_query
 
 CheckResult = tuple[bool, str] | None  # (is_breach, human-readable detail), or None if no data yet
 
@@ -35,6 +37,8 @@ def _rule_interval_seconds(rule: AlertRule) -> int:
         return INTERVAL_BUCKET_SECONDS[rule.port_check.interval_bucket]
     if rule.rule_type == AlertRuleType.HTTP_MONITOR:
         return INTERVAL_BUCKET_SECONDS[rule.http_monitor.interval_bucket]
+    if rule.rule_type in LLM_RULE_TYPES:
+        return LLM_COST_ALERT_INTERVAL_SECONDS
     return NODE_EXPORTER_SCRAPE_INTERVAL_SECONDS
 
 
@@ -69,14 +73,14 @@ def _status_in_range(code: int, spec: str) -> bool:
     return False
 
 
-def _check_ping(rule: AlertRule) -> CheckResult:
+def _check_ping(rule: AlertRule, db: Session) -> CheckResult:
     value = prometheus_query.get_probe_success("server_ping", rule.server_id)
     if value is None:
         return None
     return (value == 0, f"Ping to {rule.server.name} ({rule.server.host})")
 
 
-def _check_tcp(rule: AlertRule) -> CheckResult:
+def _check_tcp(rule: AlertRule, db: Session) -> CheckResult:
     value = prometheus_query.get_probe_success("tcp_port", rule.port_check_id)
     if value is None:
         return None
@@ -86,7 +90,7 @@ def _check_tcp(rule: AlertRule) -> CheckResult:
     return (breach, f"Port {rule.port_check.port} on {server_name} ({'open' if port_open else 'closed'})")
 
 
-def _check_http(rule: AlertRule) -> CheckResult:
+def _check_http(rule: AlertRule, db: Session) -> CheckResult:
     # blackbox_exporter's own probe_success defaults to "2xx only", which would
     # misjudge a monitor that intentionally expects e.g. 404. So probe_success is
     # only used here to tell "never scraped yet" (metric absent) apart from
@@ -106,7 +110,7 @@ def _check_http(rule: AlertRule) -> CheckResult:
     return (True, f"{name} returned {code}, expected {rule.http_monitor.expected_status_codes}")
 
 
-def _check_resource(rule: AlertRule) -> CheckResult:
+def _check_resource(rule: AlertRule, db: Session) -> CheckResult:
     if rule.rule_type == AlertRuleType.RESOURCE_CPU:
         value = prometheus_query.get_cpu_usage_percent(rule.server_id)
         label = "CPU"
@@ -128,6 +132,20 @@ def _check_resource(rule: AlertRule) -> CheckResult:
     return (value >= threshold, f"{label} usage on {rule.server.name}: {value:.1f}% (threshold {threshold:.0f}%)")
 
 
+def _check_llm_cost(rule: AlertRule, db: Session) -> CheckResult:
+    tokens, cost = llm_cost.get_today_totals(db, rule.server_id)
+    threshold = float(rule.threshold_value)
+    if rule.rule_type == AlertRuleType.LLM_TOKENS:
+        return (
+            tokens >= threshold,
+            f"LLM token usage on {rule.server.name}: {tokens:,.0f} tokens today (threshold {threshold:,.0f})",
+        )
+    return (
+        cost >= threshold,
+        f"LLM cost on {rule.server.name}: ${cost:,.2f} today (threshold ${threshold:,.2f})",
+    )
+
+
 _CHECKERS = {
     AlertRuleType.SERVER_PING: _check_ping,
     AlertRuleType.TCP_PORT: _check_tcp,
@@ -135,6 +153,8 @@ _CHECKERS = {
     AlertRuleType.RESOURCE_CPU: _check_resource,
     AlertRuleType.RESOURCE_RAM: _check_resource,
     AlertRuleType.RESOURCE_DISK: _check_resource,
+    AlertRuleType.LLM_TOKENS: _check_llm_cost,
+    AlertRuleType.LLM_COST: _check_llm_cost,
 }
 
 
@@ -155,7 +175,7 @@ def _render_message(rule: AlertRule, detail: str) -> str:
 
 def _evaluate_rule(db: Session, rule: AlertRule, now: datetime, pending_dispatch: list[int]) -> None:
     checker = _CHECKERS[rule.rule_type]
-    result = checker(rule)
+    result = checker(rule, db)
     if result is None:
         return  # no Prometheus data yet — retry sooner rather than waiting a full bucket
 
@@ -190,7 +210,12 @@ def _evaluate_rule(db: Session, rule: AlertRule, now: datetime, pending_dispatch
                 open_event.status = AlertEventStatus.RESOLVED
                 open_event.resolved_at = now
                 db.flush()
-                pending_dispatch.append(open_event.id)
+                # llm_tokens/llm_cost can't actually "resolve" — a transition
+                # back to healthy just means the day rolled over and today's
+                # total reset, not that anything was fixed. Close the episode
+                # so a fresh breach tomorrow can fire again, but don't notify.
+                if rule.rule_type not in LLM_RULE_TYPES:
+                    pending_dispatch.append(open_event.id)
 
 
 def _suppress_rule(db: Session, rule: AlertRule, now: datetime) -> None:

@@ -55,6 +55,8 @@ class AlertRuleType(StrEnum):
     RESOURCE_CPU = "resource_cpu"
     RESOURCE_RAM = "resource_ram"
     RESOURCE_DISK = "resource_disk"
+    LLM_TOKENS = "llm_tokens"
+    LLM_COST = "llm_cost"
 
 
 RESOURCE_RULE_TYPES = {
@@ -62,6 +64,20 @@ RESOURCE_RULE_TYPES = {
     AlertRuleType.RESOURCE_RAM,
     AlertRuleType.RESOURCE_DISK,
 }
+
+# Daily usage only grows through the day, so these can't "resolve" the way
+# every other rule type can — a transition back to healthy just means the day
+# rolled over, not that anything was fixed, so it's closed silently instead of
+# notifying. See alert_engine._evaluate_rule.
+LLM_RULE_TYPES = {
+    AlertRuleType.LLM_TOKENS,
+    AlertRuleType.LLM_COST,
+}
+
+# How often llm_tokens/llm_cost rules are re-checked — matches the
+# sync_llm_usage Celery Beat cadence, since checking more often than the
+# underlying data changes is pointless.
+LLM_COST_ALERT_INTERVAL_SECONDS = 1800
 
 # node_exporter is scraped on a single fixed job (not bucketed like blackbox
 # probes), so resource-rule evaluation cadence is gated on this instead of an

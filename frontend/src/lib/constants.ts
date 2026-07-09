@@ -7,6 +7,8 @@ export const RULE_TYPE_LABEL: Record<AlertRuleType, string> = {
   resource_cpu: "CPU usage",
   resource_ram: "RAM usage",
   resource_disk: "Disk usage",
+  llm_tokens: "LLM tokens (daily)",
+  llm_cost: "LLM cost (daily)",
 };
 
 // Matches the provider keys returned by the LLM usage exporter's API exactly

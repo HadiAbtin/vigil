@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 _VALID_TARGET_SQL = (
     "(rule_type = 'server_ping' AND server_id IS NOT NULL AND port_check_id IS NULL AND http_monitor_id IS NULL) OR "
-    "(rule_type IN ('resource_cpu', 'resource_ram', 'resource_disk') AND server_id IS NOT NULL "
+    "(rule_type IN ('resource_cpu', 'resource_ram', 'resource_disk', 'llm_tokens', 'llm_cost') AND server_id IS NOT NULL "
     "AND port_check_id IS NULL AND http_monitor_id IS NULL) OR "
     "(rule_type = 'tcp_port' AND port_check_id IS NOT NULL AND server_id IS NULL AND http_monitor_id IS NULL) OR "
     "(rule_type = 'http_monitor' AND http_monitor_id IS NOT NULL AND server_id IS NULL AND port_check_id IS NULL)"
@@ -41,7 +41,10 @@ class AlertRule(Base, TimestampMixin):
         ForeignKey("http_monitors.id", ondelete="CASCADE"), nullable=True
     )
 
-    threshold_value: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Numeric(14, 2) rather than a percent-shaped Numeric(5, 2): llm_tokens/
+    # llm_cost thresholds can be arbitrarily large token counts or dollar
+    # totals, not just 0-100 percentages.
+    threshold_value: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     level: Mapped[str] = mapped_column(String(8), default=AlertLevel.WARNING)
     category_id: Mapped[int] = mapped_column(ForeignKey("alert_categories.id"))
     consecutive_breaches_required: Mapped[int] = mapped_column(Integer, default=3, server_default="3")

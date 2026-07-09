@@ -8,7 +8,9 @@ export type AlertRuleType =
   | "http_monitor"
   | "resource_cpu"
   | "resource_ram"
-  | "resource_disk";
+  | "resource_disk"
+  | "llm_tokens"
+  | "llm_cost";
 export type AlertLevel = "info" | "warning" | "high";
 export type AlertEventStatus = "firing" | "resolved" | "suppressed";
 
