@@ -166,7 +166,7 @@ export function LlmCostChart({ serverId }: { serverId: number }) {
               width={64}
             />
             <Tooltip
-              formatter={(value: number, name: string) => [formatAxisValue(value), LLM_PROVIDER_LABEL[name] ?? name]}
+              formatter={(value, name) => [formatAxisValue(Number(value)), LLM_PROVIDER_LABEL[String(name)] ?? String(name)]}
               labelFormatter={(t) => formatBucketLabel(Number(t), granularity)}
               contentStyle={{ background: "#0e1626", border: "1px solid #1b2942", borderRadius: 8 }}
             />
